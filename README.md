@@ -19,6 +19,27 @@ Hyprland's IPC sockets. No root, no `input` group, no pip dependencies.
 | `notify-send` (optional) | desktop notifications |
 | Python ≥ 3.12 | everything else |
 
+## Compatibility
+
+WayZoom depends on **Hyprland**, not on a particular distribution: it talks to
+Hyprland's IPC sockets and installs temporary binds with `hyprctl eval`, which
+requires Hyprland's **Lua configuration**.
+
+| Status | Environment |
+|---|---|
+| Tested | [Omarchy](https://omarchy.org/) (Arch Linux), Hyprland 0.56.2 with Lua config, Python 3.14, FFmpeg 9.0 |
+| Expected to work (untested) | Other Arch-based distributions, Fedora, NixOS, openSUSE, etc. running Hyprland with Lua config and the requirements above |
+| Not supported | Hyprland with the legacy hyprlang config (`hyprctl keyword`), Sway, river, GNOME, KDE Plasma, X11 |
+
+FFmpeg must be built with `libplacebo` and a working Vulkan driver
+(`ffmpeg -h filter=libplacebo` should print the filter options).
+
+On Arch Linux / Omarchy:
+
+```bash
+sudo pacman -S --needed wf-recorder slurp ffmpeg python libnotify
+```
+
 ## Install
 
 ```bash
@@ -141,4 +162,4 @@ The domain layer (`wayzoom/domain/`) is pure and fully unit tested; adapters
 
 ## License
 
-TBD
+[MIT](LICENSE)
