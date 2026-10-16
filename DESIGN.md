@@ -148,4 +148,8 @@ was clicked), or by the cursor at the range start when there was no click.
 - Clicks and keystrokes: temporary non-consuming Hyprland binds that append a
   line to a FIFO; the daemon timestamps lines with the monotonic clock. Only
   keystroke times are stored, never key names.
+- Audio: recorded by `wf-recorder` from one PulseAudio-compatible device. The
+  `both` mode mixes the default output's monitor and the default input through
+  a temporary null sink and two loopbacks (default devices untouched); module
+  ids are persisted so a crashed daemon's mix can be unloaded later.
 - Alignment: the video is assumed to start at `t_stop - video_duration`.

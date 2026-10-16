@@ -16,6 +16,7 @@ Hyprland's IPC sockets. No root, no `input` group, no pip dependencies.
 | `wf-recorder` | screen capture |
 | `slurp` | region selection (`--region`) |
 | `ffmpeg` / `ffprobe` with **libplacebo** (Vulkan) | sub-pixel GPU zoom when rendering |
+| `pactl` (libpulse; PipeWire with `pipewire-pulse`) | desktop/microphone audio (`--audio`) |
 | `notify-send` (optional) | desktop notifications |
 | Python ≥ 3.12 | everything else |
 
@@ -60,12 +61,12 @@ On [Omarchy](https://omarchy.org/) you can use its helper instead:
 ## Usage
 
 ```text
-wayzoom toggle [--region] [--audio] [--no-typing-zoom] [--zoom 2.0] [--zoom-speed P] [--cursor-speed P]
+wayzoom toggle [--region] [--audio {both,desktop,mic,none} | --no-audio] [--no-typing-zoom] [--zoom 2.0] [--zoom-speed P] [--cursor-speed P]
 wayzoom start  [same options]       start recording in the background
 wayzoom stop                        stop, render and notify with the output path
 wayzoom status                      idle | recording | rendering | stale pidfile
 wayzoom render SESSION_DIR [--zoom Z] [--zoom-speed P] [--cursor-speed P] [--output PATH] [--plan] [--no-typing-zoom]
-wayzoom cleanup                     remove click/key binds and stale runtime files
+wayzoom cleanup                     remove click/key binds, audio modules and stale runtime files
 ```
 
 Spring presets `P`: `slow` (default camera), `mellow` (default cursor),
@@ -82,7 +83,29 @@ Files:
   `raw.mkv`, `cursor.csv`, `clicks.csv`, `keys.csv`, `events.log`,
   `meta.json` and logs.
 - Runtime: `$XDG_RUNTIME_DIR/wayzoom/` (`recorder.pid`, `state`, `clicks.fifo`,
-  `bound_keys`).
+  `bound_keys`, `audio_modules`).
+
+### Audio
+
+`--audio` picks what is recorded (default `both`):
+
+| Mode | Records |
+|---|---|
+| `both` | speakers and microphone, mixed into one track |
+| `desktop` | what the default output plays (its monitor) |
+| `mic` | the default input |
+| `none` / `--no-audio` | no audio |
+
+`both` loads a temporary virtual sink, shown as **WayZoom-mix** in audio
+mixers while recording, plus two loopbacks feeding it from the default output's
+monitor and the default input. Your default output and input are never
+changed; the modules are unloaded when the recording stops. Their ids are kept
+in `$XDG_RUNTIME_DIR/wayzoom/audio_modules`, so after a hard kill the next
+recording, or `wayzoom cleanup`, unloads them.
+
+This needs `pactl` talking to PulseAudio or PipeWire with `pipewire-pulse`.
+Without it, or without a default output/input, WayZoom falls back to whatever
+side is available (or no audio) and logs a warning.
 
 ### Typing zoom and privacy
 
@@ -148,7 +171,8 @@ render   resample → smooth → cursor spring → typing ranges → zoom segmen
   those buttons while stopping; modified binds such as `SUPER + drag` survive.
   If you have your own unmodified mouse-button binds, re-add them afterwards.
 - If the daemon is killed hard, run `wayzoom cleanup` to remove the click and
-  key binds (the next recording also removes stale key binds first).
+  key binds and the audio mix (the next recording also removes stale key binds
+  and audio modules first).
 - No motion blur, cursor restyling or background/padding.
 
 ## Development

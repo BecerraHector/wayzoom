@@ -111,6 +111,44 @@ class StatusTest(unittest.TestCase):
             recording_session.cleanup()
         remove_keys.assert_not_called()
 
+    def test_cleanup_unloads_recorded_audio_modules(self) -> None:
+        runtime = recording_session.runtime_dir()
+        runtime.mkdir(parents=True)
+        (runtime / recording_session.AUDIO_MODULES_FILE).write_text("11\n12\n13\n")
+        calls: list[list[str]] = []
+        with (
+            mock.patch("wayzoom.adapters.hyprland.remove_click_binds"),
+            mock.patch("wayzoom.adapters.audio_mixer.run_pactl", side_effect=lambda a: calls.append(a) or ""),
+        ):
+            messages = recording_session.cleanup()
+        self.assertEqual(calls, [["unload-module", "13"], ["unload-module", "12"], ["unload-module", "11"]])
+        self.assertFalse((runtime / recording_session.AUDIO_MODULES_FILE).exists())
+        self.assertTrue(any("3 audio modules" in m for m in messages))
+
+    def test_cleanup_without_audio_file_runs_no_pactl(self) -> None:
+        with (
+            mock.patch("wayzoom.adapters.hyprland.remove_click_binds"),
+            mock.patch("wayzoom.adapters.audio_mixer.run_pactl") as pactl,
+        ):
+            recording_session.cleanup()
+        pactl.assert_not_called()
+
+    def test_stale_audio_modules_are_unloaded_before_setup(self) -> None:
+        runtime = recording_session.runtime_dir()
+        runtime.mkdir(parents=True)
+        (runtime / recording_session.AUDIO_MODULES_FILE).write_text("21\n22\n")
+        calls: list[list[str]] = []
+
+        def pactl(args: list[str]) -> str:
+            calls.append(args)
+            return {"get-default-sink": "spk\n", "get-default-source": "mic\n"}.get(args[0], "")
+
+        with mock.patch("wayzoom.adapters.audio_mixer.run_pactl", side_effect=pactl):
+            mixer, setup = recording_session._setup_audio("desktop")
+        self.assertEqual(calls[:2], [["unload-module", "22"], ["unload-module", "21"]])
+        self.assertEqual((setup.mode, setup.device), ("desktop", "spk.monitor"))
+        mixer.teardown()
+
     def test_stop_without_daemon_fails(self) -> None:
         with self.assertRaises(recording_session.SessionError):
             recording_session.stop()

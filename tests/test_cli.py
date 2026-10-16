@@ -18,7 +18,7 @@ class ParserTest(unittest.TestCase):
     def test_toggle_defaults(self) -> None:
         args = build_parser().parse_args(["toggle", "--region"])
         self.assertTrue(args.region)
-        self.assertFalse(args.audio)
+        self.assertEqual(args.audio, "both")
         self.assertEqual(args.zoom_speed, "slow")
 
     def test_typing_zoom_flags(self) -> None:
@@ -31,6 +31,18 @@ class ParserTest(unittest.TestCase):
     def test_start_request_carries_typing_flag(self) -> None:
         args = build_parser().parse_args(["start", "--no-typing-zoom"])
         self.assertFalse(_start_request(args).typing_zoom)
+
+    def test_audio_modes(self) -> None:
+        parser = build_parser()
+        self.assertEqual(parser.parse_args(["start"]).audio, "both")
+        self.assertEqual(parser.parse_args(["start", "--audio", "mic"]).audio, "mic")
+        self.assertEqual(parser.parse_args(["toggle", "--audio", "desktop"]).audio, "desktop")
+        self.assertEqual(parser.parse_args(["toggle", "--no-audio"]).audio, "none")
+        self.assertEqual(_start_request(parser.parse_args(["start", "--no-audio"])).audio, "none")
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            parser.parse_args(["start", "--audio", "loud"])
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            parser.parse_args(["start", "--audio", "mic", "--no-audio"])
 
     def test_rejects_unknown_preset(self) -> None:
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):

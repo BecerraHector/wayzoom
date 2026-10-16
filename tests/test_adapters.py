@@ -157,15 +157,17 @@ class RecorderTest(unittest.TestCase):
             parse_geometry("0,0 0x10")
 
     def test_output_command(self) -> None:
-        command = recorder_command(CaptureTarget(output="eDP-1"), Path("/s/raw.mkv"), audio=True)
+        command = recorder_command(
+            CaptureTarget(output="eDP-1"), Path("/s/raw.mkv"), audio_device="wayzoom_mix.monitor"
+        )
         self.assertEqual(command[:4], ["wf-recorder", "-y", "-o", "eDP-1"])
         self.assertIn("preset=ultrafast", command)
-        self.assertEqual(command[-1], "--audio")
+        self.assertEqual(command[-1], "--audio=wayzoom_mix.monitor")
 
     def test_region_command(self) -> None:
-        command = recorder_command(CaptureTarget(geometry="1,2 3x4"), Path("/s/raw.mkv"), audio=False)
+        command = recorder_command(CaptureTarget(geometry="1,2 3x4"), Path("/s/raw.mkv"), audio_device=None)
         self.assertEqual(command[2:4], ["-g", "1,2 3x4"])
-        self.assertNotIn("--audio", command)
+        self.assertFalse(any(part.startswith("--audio") for part in command))
 
 
 class FfmpegTest(unittest.TestCase):

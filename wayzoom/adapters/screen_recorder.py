@@ -46,7 +46,9 @@ def select_region() -> str:
     return geometry
 
 
-def recorder_command(target: CaptureTarget, output: Path, audio: bool, fps: int = 60) -> list[str]:
+def recorder_command(
+    target: CaptureTarget, output: Path, audio_device: str | None = None, fps: int = 60
+) -> list[str]:
     command = ["wf-recorder", "-y"]
     if target.geometry:
         command += ["-g", target.geometry]
@@ -60,16 +62,18 @@ def recorder_command(target: CaptureTarget, output: Path, audio: bool, fps: int 
         "-p", "crf=18",
         "-x", "yuv420p",
     ]
-    if audio:
-        command.append("--audio")
+    if audio_device:
+        command.append(f"--audio={audio_device}")
     return command
 
 
 class ScreenRecorder:
     """Owns one wf-recorder process."""
 
-    def __init__(self, target: CaptureTarget, output: Path, audio: bool, log_path: Path) -> None:
-        self.command = recorder_command(target, output, audio)
+    def __init__(
+        self, target: CaptureTarget, output: Path, audio_device: str | None, log_path: Path
+    ) -> None:
+        self.command = recorder_command(target, output, audio_device)
         self._log_path = log_path
         self._process: subprocess.Popen[bytes] | None = None
 

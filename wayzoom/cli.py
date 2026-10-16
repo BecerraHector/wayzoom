@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from wayzoom import __version__
+from wayzoom.adapters.audio_mixer import DEFAULT_MODE, MODES
 from wayzoom.adapters.ffmpeg_renderer import RenderError
 from wayzoom.adapters.hyprland import HyprlandUnavailable
 from wayzoom.app import recording_session, render_session
@@ -35,7 +36,12 @@ def _add_motion_options(parser: argparse.ArgumentParser) -> None:
 
 def _add_capture_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--region", action="store_true", help="select a region with slurp")
-    parser.add_argument("--audio", action="store_true", help="record default audio source")
+    audio = parser.add_mutually_exclusive_group()
+    audio.add_argument(
+        "--audio", choices=MODES, default=DEFAULT_MODE,
+        help=f"audio to record: speakers and mic mixed, one of them, or none (default: {DEFAULT_MODE})",
+    )
+    audio.add_argument("--no-audio", dest="audio", action="store_const", const="none", help="same as --audio none")
     parser.add_argument(
         "--no-typing-zoom", dest="typing_zoom", action="store_false",
         help="do not capture keystroke timestamps (no key binds, no typing zoom)",

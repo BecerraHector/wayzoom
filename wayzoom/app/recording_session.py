@@ -31,7 +31,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import wayzoom
-from wayzoom.adapters import hyprland, notifier
+from wayzoom.adapters import audio_mixer, hyprland, notifier
+from wayzoom.adapters.audio_mixer import AudioMixer, AudioSetup
 from wayzoom.adapters.screen_recorder import CaptureTarget, ScreenRecorder, parse_geometry, select_region
 from wayzoom.app import render_session
 from wayzoom.app.render_session import RenderOptions
@@ -42,6 +43,7 @@ PIDFILE = "recorder.pid"
 STATEFILE = "state"
 FIFO = "clicks.fifo"
 BOUND_KEYS_FILE = "bound_keys"
+AUDIO_MODULES_FILE = "audio_modules"
 REQUEST_FILE = "request.json"
 START_TIMEOUT = 5.0
 
@@ -112,7 +114,7 @@ def _write_state(state: str, session_dir: Path) -> None:
 @dataclass(frozen=True)
 class StartRequest:
     region: bool = False
-    audio: bool = False
+    audio: str = audio_mixer.DEFAULT_MODE
     zoom: float = 2.0
     zoom_speed: str = "slow"
     cursor_speed: str = "mellow"
@@ -218,6 +220,10 @@ def cleanup() -> list[str]:
             messages.append(f"removed {len(keys)} key binds")
         except (RuntimeError, hyprland.HyprlandUnavailable) as exc:
             messages.append(f"could not remove key binds: {exc}")
+    audio_record = runtime_dir() / AUDIO_MODULES_FILE
+    if audio_record.exists():
+        unloaded = audio_mixer.unload_recorded(audio_record)
+        messages.append(f"unloaded {len(unloaded)} audio modules")
     for name in (PIDFILE, STATEFILE, FIFO):
         path = runtime_dir() / name
         if path.exists() or path.is_symlink():
@@ -331,6 +337,21 @@ def _remove_key_binds() -> None:
     (runtime_dir() / BOUND_KEYS_FILE).unlink(missing_ok=True)
 
 
+# --- audio ------------------------------------------------------------------
+
+
+def _setup_audio(mode: str) -> tuple[AudioMixer, AudioSetup]:
+    """Unload modules a dead daemon left behind, then prepare ``mode``."""
+    record = runtime_dir() / AUDIO_MODULES_FILE
+    if record.exists():
+        log.warning("unloading stale audio modules")
+        audio_mixer.unload_recorded(record)
+    mixer = AudioMixer(record)
+    setup = mixer.setup(mode)
+    log.info("audio: %s (%s)", setup.mode, setup.device or "no device")
+    return mixer, setup
+
+
 def _acquire_pidfile() -> bool:
     path = runtime_dir() / PIDFILE
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -415,12 +436,25 @@ def _record(session_dir: Path, request: dict, stop_event: threading.Event, stop_
         hyprland.EventListener(on_event),
         ClickReader(read_fd, clicks_log, keys_log if typing else None),
     ]
-    recorder = ScreenRecorder(
-        target, session_dir / render_session.RAW_VIDEO, bool(args.get("audio")),
-        session_dir / "wf-recorder.log",
-    )
+    recorder: ScreenRecorder | None = None
+    mixer: AudioMixer | None = None
     t_start = time.monotonic()
     try:
+        mode = audio_mixer.normalize_mode(args.get("audio"))
+        try:
+            mixer, audio = _setup_audio(mode)
+        except (OSError, audio_mixer.AudioError) as exc:
+            log.error("audio capture unavailable: %s", exc)
+            audio = AudioSetup("none", None)
+        if mode != "none" and audio.mode != mode:
+            notifier.notify("WayZoom: audio limited", f"Recording audio: {audio.mode}")
+        args["audio"] = mode
+        args["audio_mode"] = audio.mode
+        args["audio_device"] = audio.device
+        recorder = ScreenRecorder(
+            target, session_dir / render_session.RAW_VIDEO, audio.device,
+            session_dir / "wf-recorder.log",
+        )
         try:
             hyprland.install_click_binds(fifo)
         except (RuntimeError, hyprland.HyprlandUnavailable) as exc:
@@ -451,7 +485,13 @@ def _record(session_dir: Path, request: dict, stop_event: threading.Event, stop_
             _remove_key_binds()
         except (RuntimeError, hyprland.HyprlandUnavailable) as exc:
             log.error("failed to remove key binds (run `wayzoom cleanup`): %s", exc)
-        recorder.stop()
+        if recorder is not None:
+            recorder.stop()
+        if mixer is not None:
+            try:
+                mixer.teardown()
+            except OSError as exc:
+                log.error("failed to remove audio modules (run `wayzoom cleanup`): %s", exc)
         for thread in threads:
             thread.stop()  # type: ignore[attr-defined]
         for thread in threads:
