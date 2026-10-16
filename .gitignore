@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.codegraph/
+
+# Local planning notes (not published)
+odd/

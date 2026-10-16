@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# WayZoom launcher: works when called directly or through a symlink.
+set -euo pipefail
+script="$(readlink -f "${BASH_SOURCE[0]}")"
+repo_root="$(cd "$(dirname "$script")/.." && pwd)"
+export PYTHONPATH="${repo_root}${PYTHONPATH:+:${PYTHONPATH}}"
+exec python3 -m wayzoom "$@"
